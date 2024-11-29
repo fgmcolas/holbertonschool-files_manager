@@ -49,7 +49,7 @@ const getDisconnect = async (req, res) => {
   }
 
   await redisClient.del(key);
-  return res.status(204);
+  return res.status(204).send;
 };
 
 module.exports = { getConnect, getDisconnect };
