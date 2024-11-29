@@ -142,7 +142,7 @@ class FilesController {
     }
     if (session) {
       let { parentId, page } = req.query;
-      if (!parentId) parentId = '0';
+      parentId = parentId || '0';
       page = parseInt(page, 10) || 0;
 
       const limit = 20;
@@ -156,8 +156,7 @@ class FilesController {
 
         const search = await dbClient.db.collection('files').find(query).skip(skip).limit(limit)
           .toArray();
-
-        return res.status(200).send(search);
+        return res.status(200).json(search);
       } catch (e) {
         return res.status(500).json({ error: 'Internal server error' });
       }
