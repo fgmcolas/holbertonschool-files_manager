@@ -14,39 +14,46 @@ class FilesController {
       return res.status(401).json({ error: 'Unauthorized' });
     }
     if (session) {
-      const { name } = req.body;
-      const { type } = req.body;
+      const {
+        name,
+        type,
+        isPublic,
+        data,
+      } = req.body;
+
       let { parentId } = req.body;
-      const { isPublic } = req.body;
-      const { data } = req.body;
       const types = ['folder', 'file', 'image'];
 
       if (!name) {
-        return (res.status(400).json({ error: 'Missing name' }));
-      } if ((!type) || types.includes(type) === false) {
-        return (res.status(400).json({ error: 'Missing type' }));
+        return res.status(400).json({ error: 'Missing name' });
+      }
+      if (!type || !types.includes(type)) {
+        return res.status(400).json({ error: 'Missing type' });
+      }
+      if (!data && type !== 'folder') {
+        return res.status(400).json({ error: 'Missing data' });
+      }
+      if (!parentId) {
+        parentId = '0';
       }
 
-      if (!data && type !== types[0]) {
-        return (res.status(400).json({ error: 'Missing data' }));
-      }
-      if (!parentId) { parentId = 0; }
-      if (parentId !== 0) {
+      if (parentId !== '0') {
         const search = await dbClient.db.collection('files').find({ _id: ObjectId(parentId) }).toArray();
         if (search.length < 1) {
-          return (res.status(400).json({ error: 'Parent not found' }));
+          return res.status(400).json({ error: 'Parent not found' });
         }
-        if (types[0] !== search[0].type) {
-          return (res.status(400).json({ error: 'Parent is not a folder' }));
+        if (search[0].type !== 'folder') {
+          return res.status(400).json({ error: 'Parent is not a folder' });
         }
       }
+
       const userId = session;
-      if (type === types[0]) {
+      if (type === 'folder') {
         const folder = await dbClient.db.collection('files').insertOne({
           name,
           type,
           userId: ObjectId(userId),
-          parentId: parentId !== 0 ? ObjectId(parentId) : 0,
+          parentId: parentId !== '0' ? ObjectId(parentId) : '0',
           isPublic: isPublic || false,
         });
         return res.status(201).json({
@@ -66,19 +73,19 @@ class FilesController {
       if (!fs.existsSync(path)) {
         fs.mkdirSync(path, { recursive: true });
       }
-      fs.writeFile(`${path}/${newFile}`, buff, (err) => {
-        if (err) {
-          return (res.status(400).json({ error: err.message }));
-        }
-        return true;
-      });
+
+      try {
+        fs.writeFileSync(`${path}/${newFile}`, buff);
+      } catch (err) {
+        return res.status(400).json({ error: err.message });
+      }
+
       const file = await dbClient.db.collection('files').insertOne({
         name,
         type,
         userId: ObjectId(userId),
-        parentId: parentId !== 0 ? ObjectId(parentId) : 0,
+        parentId: parentId !== '0' ? ObjectId(parentId) : '0',
         isPublic: isPublic || false,
-        data,
         localPath: `${path}/${newFile}`,
       });
 
@@ -102,18 +109,27 @@ class FilesController {
     }
     if (session) {
       const { id } = req.params;
-      const search = await dbClient.db.collection('files').find({ _id: ObjectId(id) }).toArray();
-      if (!search || search.length < 1) {
+      try {
+        const search = await dbClient.db.collection('files').find({
+          _id: ObjectId(id),
+          userId: ObjectId(session),
+        }).toArray();
+
+        if (!search || search.length < 1) {
+          return res.status(404).json({ error: 'Not found' });
+        }
+
+        return res.json({
+          id: search[0]._id,
+          userId: search[0].userId,
+          name: search[0].name,
+          type: search[0].type,
+          isPublic: search[0].isPublic,
+          parentId: search[0].parentId,
+        });
+      } catch (e) {
         return res.status(404).json({ error: 'Not found' });
       }
-      return (res.json({
-        id: search[0]._id,
-        userId: search[0].userId,
-        name: search[0].name,
-        type: search[0].type,
-        isPublic: search[0].isPublic,
-        parentId: search[0].parentId,
-      }));
     }
     return res.status(401).json({ error: 'Unauthorized' });
   }
@@ -125,61 +141,39 @@ class FilesController {
       return res.status(401).json({ error: 'Unauthorized' });
     }
     if (session) {
-      let { parentId } = req.query;
-      if (!parentId) { parentId = '0'; }
-      if (parentId === '0') {
-        const search = await dbClient.db.collection('files').find({ parentId: parseInt(parentId, 10) }).toArray();
-        if (search) {
-          return res.status(200).send(search);
-        }
-      } else if (parentId !== 0) {
-        const search = await dbClient.db.collection('files').find({ parentId: ObjectId(parentId) }).toArray();
-        if (search) {
-          return res.status(200).send(search);
-        }
+      let { parentId, page } = req.query;
+      if (!parentId) parentId = '0';
+      page = parseInt(page, 10) || 0;
+
+      const limit = 20;
+      const skip = page * limit;
+
+      try {
+        const query = {
+          parentId: parentId === '0' ? '0' : ObjectId(parentId),
+          userId: ObjectId(session),
+        };
+
+        const search = await dbClient.db.collection('files').find(query).skip(skip).limit(limit)
+          .toArray();
+
+        return res.status(200).send(search);
+      } catch (e) {
+        return res.status(500).json({ error: 'Internal server error' });
       }
     }
     return res.status(401).json({ error: 'Unauthorized' });
   }
 
   static async putPublish(req, res) {
-    const key = req.header('X-Token');
-    const session = await redisClient.get(`auth_${key}`);
-    if (!key || key.length === 0) {
-      return res.status(401).json({ error: 'Unauthorized' });
-    }
-    if (session) {
-      const { id } = req.params;
-      if (!id || id === '') {
-        return res.status(401).json({ error: 'Unauthorized' });
-      }
-      let search = [];
-      try {
-        search = await dbClient.db.collection('files').find({ _id: ObjectId(id), userId: ObjectId(session) }).toArray();
-      } catch (e) {
-        return (res.status(404).json({ error: 'Not found' }));
-      }
-      if (!search || search.length < 1) {
-        return (res.status(404).json({ error: 'Not found' }));
-      }
-      await dbClient.db.collection('files').updateOne({ _id: ObjectId(id) }, { $set: { isPublic: true } });
-      const search1 = await dbClient.db.collection('files').find({ _id: ObjectId(id), userId: ObjectId(session) }).toArray();
-      if (!search1 || search1.length < 1) {
-        return (res.status(404).json({ error: 'Not found' }));
-      }
-      return res.status(200).json({
-        id: search1[0]._id,
-        userId: search1[0].userId,
-        name: search1[0].name,
-        type: search1[0].type,
-        isPublic: search1[0].isPublic,
-        parentId: search1[0].parentId,
-      });
-    }
-    return res.status(401).json({ error: 'Unauthorized' });
+    return FilesController.updatePublicStatus(req, res, true);
   }
 
   static async putUnpublish(req, res) {
+    return FilesController.updatePublicStatus(req, res, false);
+  }
+
+  static async updatePublicStatus(req, res, isPublic) {
     const key = req.header('X-Token');
     const session = await redisClient.get(`auth_${key}`);
     if (!key || key.length === 0) {
@@ -188,30 +182,35 @@ class FilesController {
     if (session) {
       const { id } = req.params;
       if (!id || id === '') {
-        return res.status(401).json({ error: 'Unauthorized' });
+        return res.status(404).json({ error: 'Not found' });
       }
-      let search = [];
       try {
-        search = await dbClient.db.collection('files').find({ _id: ObjectId(id), userId: ObjectId(session) }).toArray();
+        const search = await dbClient.db.collection('files').find({
+          _id: ObjectId(id),
+          userId: ObjectId(session),
+        }).toArray();
+
+        if (!search || search.length < 1) {
+          return res.status(404).json({ error: 'Not found' });
+        }
+
+        await dbClient.db.collection('files').updateOne(
+          { _id: ObjectId(id) },
+          { $set: { isPublic } },
+        );
+
+        const updatedFile = await dbClient.db.collection('files').findOne({ _id: ObjectId(id) });
+        return res.status(200).json({
+          id: updatedFile._id,
+          userId: updatedFile.userId,
+          name: updatedFile.name,
+          type: updatedFile.type,
+          isPublic: updatedFile.isPublic,
+          parentId: updatedFile.parentId,
+        });
       } catch (e) {
-        return (res.status(404).json({ error: 'Not found' }));
+        return res.status(404).json({ error: 'Not found' });
       }
-      if (!search || search.length < 1) {
-        return (res.status(404).json({ error: 'Not found' }));
-      }
-      await dbClient.db.collection('files').updateOne({ _id: ObjectId(id) }, { $set: { isPublic: false } });
-      const search1 = await dbClient.db.collection('files').find({ _id: ObjectId(id), userId: ObjectId(session) }).toArray();
-      if (!search1 || search1.length < 1) {
-        return (res.status(404).json({ error: 'Not found' }));
-      }
-      return res.status(200).json({
-        id: search1[0]._id,
-        userId: search1[0].userId,
-        name: search1[0].name,
-        type: search1[0].type,
-        isPublic: search1[0].isPublic,
-        parentId: search1[0].parentId,
-      });
     }
     return res.status(401).json({ error: 'Unauthorized' });
   }
@@ -221,64 +220,35 @@ class FilesController {
     if (!id || id === '') {
       return res.status(404).json({ error: 'Not found' });
     }
-    let search = [];
     try {
-      search = await dbClient.db.collection('files').find({ _id: ObjectId(id) }).toArray();
-    } catch (e) {
-      return (res.status(404).json({ error: 'Not found' }));
-    }
-    if (!search || search.length < 1) {
-      return (res.status(404).json({ error: 'Not found' }));
-    }
-    if (search[0].type === 'folder') {
-      return res.status(400).json({ error: 'A folder doesn\'t have content' });
-    }
-    if (search[0].isPublic === false) {
-      const key = req.header('X-Token');
-      const session = await redisClient.get(`auth_${key}`);
-      if (!key || key.length === 0) {
+      const file = await dbClient.db.collection('files').findOne({ _id: ObjectId(id) });
+      if (!file) {
         return res.status(404).json({ error: 'Not found' });
       }
-      if (session) {
-        let search1 = [];
-        try {
-          search1 = await dbClient.db.collection('files').find({ _id: ObjectId(id), userId: ObjectId(session) }).toArray();
-        } catch (e) {
-          return (res.status(404).json({ error: 'Not found' }));
-        }
-        if (!search1 || search1.length < 1) {
-          return (res.status(404).json({ error: 'Not found' }));
-        }
-        if (!fs.existsSync(search1[0].localPath)) {
+
+      if (file.type === 'folder') {
+        return res.status(400).json({ error: 'A folder doesn\'t have content' });
+      }
+
+      if (!file.isPublic) {
+        const key = req.header('X-Token');
+        const session = await redisClient.get(`auth_${key}`);
+        if (!session || String(file.userId) !== session) {
           return res.status(404).json({ error: 'Not found' });
         }
-
-        const type = mime.contentType(search1[0].name);
-        const charset = type.split('=')[1];
-        try {
-          const data = fs.readFileSync(search1[0].localPath, charset);
-          return res.send(data);
-        } catch (e) {
-          return (res.status(404).json({ error: 'Not found' }));
-        }
       }
-      return res.status(404).json({ error: 'Not found' });
-    }
 
-    const search2 = await dbClient.db.collection('files').find({ _id: ObjectId(id) }).toArray();
-    if (!search2 || search2.length < 1) {
-      return (res.status(404).json({ error: 'Not found' }));
-    }
-    if (!fs.existsSync(search2[0].localPath)) {
-      return res.status(404).json({ error: 'Not found' });
-    }
-    const type = mime.contentType(search2[0].name);
-    const charset = type.split('=')[1];
-    try {
-      const data = fs.readFileSync(search2[0].localPath, charset);
+      if (!fs.existsSync(file.localPath)) {
+        return res.status(404).json({ error: 'Not found' });
+      }
+
+      const mimeType = mime.contentType(file.name) || 'application/octet-stream';
+      res.setHeader('Content-Type', mimeType);
+
+      const data = fs.readFileSync(file.localPath);
       return res.send(data);
     } catch (e) {
-      return (res.status(404).json({ error: 'Not found' }));
+      return res.status(404).json({ error: 'Not found' });
     }
   }
 }
