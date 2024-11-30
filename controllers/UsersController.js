@@ -7,7 +7,6 @@ const redisClient = require('../utils/redis');
 function hashPasswd(password) {
   const hash = crypto.createHash('sha1');
   const data = hash.update(password, 'utf-8');
-  // Creating the hash in the required format
   const genHash = data.digest('hex');
   return genHash;
 }
