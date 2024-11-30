@@ -1,22 +1,49 @@
-const dbClient = require('../utils/db');
-const redisClient = require('../utils/redis');
+import redis from 'redis';
 
-class AppController {
-  static getStatus(req, res) {
-    if (redisClient.isAlive() && dbClient.isAlive()) {
-      res.status(200).json({ redis: true, db: true }, 200);
-    }
+class RedisClient {
+  constructor() {
+    this.client = redis.createClient();
+    this.client.on('error', (err) => console.log(`Redis error : ${err}`));
   }
 
-  static async getStats(req, res) {
-    const users = await dbClient.nbUsers();
-    const files = await dbClient.nbFiles();
-    const obj = {
-      users,
-      files,
-    };
-    res.status(200).json(obj);
+  isAlive() {
+    return this.client.connected;
+  }
+
+  async get(key) {
+    return new Promise((resolve, reject) => {
+      this.client.get(key, (err, value) => {
+        if (err) {
+          reject(err);
+        }
+        resolve(value);
+      });
+    });
+  }
+
+  async set(key, value, duration) {
+    return new Promise((resolve, reject) => {
+      this.client.set(key, value, 'EX', duration, (err) => {
+        if (err) {
+          reject(err);
+        } else {
+          resolve();
+        }
+      });
+    });
+  }
+
+  async del(key) {
+    return new Promise((resolve, reject) => {
+      this.client.del(key, (err) => {
+        if (err) {
+          reject(err);
+        }
+        resolve();
+      });
+    });
   }
 }
 
-module.exports = AppController;
+const redisClient = new RedisClient();
+export { redisClient as default };
