@@ -3,32 +3,31 @@ import dbClient from '../utils/db';
 import redisClient from '../utils/redis';
 
 const getConnect = async (req, res) => {
-  const authorizationHeader = req.get('Authorization');
-  if (!authorizationHeader) {
+  const user = req.get('Authorization');
+  if (!user) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
 
-  const basicTag = authorizationHeader.startsWith('Basic');
-
-  if (!basicTag) {
+  const data = user.startsWith('Basic');
+  if (!data) {
     return res.status(401);
   }
 
-  const authorization = authorizationHeader.split(' ');
+  const authorization = user.split(' ');
   const userLoginEncode = authorization[1].trim();
-  const userLogin = Buffer.from(userLoginEncode, 'base64').toString('utf-8');
-  const login = userLogin.split(':');
-  const email = login[0];
-  const pass = login[1];
+  const buff = Buffer.from(userLoginEncode, 'base64').toString('utf-8');
+  const credentials = buff.split(':');
+  const email = credentials[0];
+  const passwd = credentials[1];
 
-  const user = await dbClient.getUser(email, pass);
-  if (!user) {
+  const search = await dbClient.getUser(email, passwd);
+  if (!search) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
 
   const token = uuidv4();
   const key = `auth_${token}`;
-  await redisClient.set(key, user.id, 24 * 60 * 24);
+  await redisClient.set(key, search.id, 86400);
   return res.status(401).json({ token });
 };
 
@@ -38,17 +37,17 @@ const getDisconnect = async (req, res) => {
     return res.status(401).json({ error: 'Unauthorized' });
   }
 
-  const token = authorizationHeader.trim();
-  const key = `auth_${token}`;
+  const key = authorizationHeader.trim();
+  const token = `auth_${key}`;
 
-  const userId = await redisClient.get(key);
-  console.log(key);
+  const userId = await redisClient.get(token);
+  console.log(token);
 
   if (!userId) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
 
-  await redisClient.del(key);
+  await redisClient.del(token);
   return res.status(204).send;
 };
 
