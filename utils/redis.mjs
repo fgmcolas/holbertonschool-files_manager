@@ -1,32 +1,22 @@
-import { promisify } from 'util';
+const dbClient = require('../utils/db');
+const redisClient = require('../utils/redis');
 
-const redis = require('redis');
-
-class RedisClient {
-  constructor() {
-    this.client = redis.createClient();
-    this.client.on('error', (error) => console.log(error.message));
+class AppController {
+  static getStatus(req, res) {
+    if (redisClient.isAlive() && dbClient.isAlive()) {
+      res.status(200).json({ redis: true, db: true }, 200);
+    }
   }
 
-  isAlive() {
-    return this.client.connected;
-  }
-
-  async get(key) {
-    const getval = await promisify(this.client.get).bind(this.client);
-    const val = await getval(key);
-    return val;
-  }
-
-  async set(key, val, duration) {
-    await this.client.set(key, val);
-    await this.client.expire(key, duration);
-  }
-
-  async del(key) {
-    await this.client.del(key);
+  static async getStats(req, res) {
+    const users = await dbClient.nbUsers();
+    const files = await dbClient.nbFiles();
+    const obj = {
+      users,
+      files,
+    };
+    res.status(200).json(obj);
   }
 }
 
-const redisClient = new RedisClient();
-module.exports = redisClient;
+module.exports = AppController;
