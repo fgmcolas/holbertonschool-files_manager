@@ -23,41 +23,24 @@ class DBClient {
   }
 
   isAlive() {
-    return !!this.db;
+    if (this.client.isConnected()) {
+      return true;
+    }
+    return false;
   }
 
   async nbUsers() {
-    const numberOfUsers = await this.usersCollection.countDocuments();
-    return numberOfUsers;
+    this.db = this.client.db(this.database);
+    const collection = await this.db.collection('users');
+    return collection.countDocuments();
   }
 
   async nbFiles() {
-    const numberOfFiles = await this.filesCollection.countDocuments();
-    return numberOfFiles;
-  }
-
-  async userEmailExist(email) {
-    try {
-      const user = await this.usersCollection.findOne({ email });
-      return !!user;
-    } catch (err) {
-      console.error('Error checking user email existence:', err);
-      return false;
-    }
-  }
-
-  async insertNewUser(email, password) {
-    try {
-      const hashedPassword = crypto.createHash('sha1').update(password).digest('hex');
-      const result = await this.usersCollection.insertOne({ email, password: hashedPassword });
-      return { id: result.insertedId, email };
-    } catch (err) {
-      console.error('Error inserting new user:', err);
-      throw new Error('Failed to insert new user');
-    }
+    this.db = this.client.db(this.database);
+    const collection = await this.db.collection('files');
+    return collection.countDocuments();
   }
 }
 
 const dbClient = new DBClient();
-
-export default dbClient;
+module.exports = dbClient;
