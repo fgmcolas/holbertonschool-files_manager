@@ -8,17 +8,12 @@ class RedisClient {
     this.client.on('error', (error) => console.log(error.message));
   }
 
-  async isAlive() {
-    return new Promise((resolve, reject) => {
-      this.client.ping((err, res) => {
-        if (err) reject(err);
-        resolve(res === 'PONG');
-      });
-    });
+  isAlive() {
+    return this.client.connected;
   }
 
   async get(key) {
-    const getval = promisify(this.client.get).bind(this.client);
+    const getval = await promisify(this.client.get).bind(this.client);
     const val = await getval(key);
     return val;
   }

@@ -10,28 +10,23 @@ class DBClient {
     this.db = this.client.db(this.database);
   }
 
-  async isAlive() {
-    try {
-      await this.client.db().command({ ping: 1 });
+  isAlive() {
+    if (this.client.isConnected()) {
       return true;
-    } catch (e) {
-      return false;
     }
+    return false;
   }
 
   async nbUsers() {
-    const collection = this.db.collection('users');
+    this.db = this.client.db(this.database);
+    const collection = await this.db.collection('users');
     return collection.countDocuments();
   }
 
   async nbFiles() {
-    const collection = this.db.collection('files');
+    this.db = this.client.db(this.database);
+    const collection = await this.db.collection('files');
     return collection.countDocuments();
-  }
-
-  async findFiles(query, limit, skip) {
-    const collection = this.db.collection('files');
-    return collection.find(query).skip(skip).limit(limit).toArray();
   }
 }
 
