@@ -133,26 +133,29 @@ class FilesController {
     if (!key || key.length === 0) {
       return res.status(401).json({ error: 'Unauthorized' });
     }
-    if (session) {
-      let { parentId, page } = req.query;
-      parentId = parentId || '0';
-      page = parseInt(page, 10) || 0;
-      const limit = 20;
-      const skip = page * limit;
+    let { parentId, page } = req.query;
+    parentId = parentId || '0';
+    page = parseInt(page, 10) || 0;
 
-      try {
-        const query = {
-          parentId: parentId === '0' ? '0' : ObjectId(parentId),
-          userId: ObjectId(session),
-        };
-        const search = await dbClient.db.collection('files').find(query).skip(skip).limit(limit)
-          .toArray();
-        return res.status(200).send(search);
-      } catch (e) {
-        return res.status(500).json({ error: 'Internal server error' });
-      }
+    const limit = 20;
+    const skip = page * limit;
+
+    try {
+      const query = {
+        parentId: parentId === '0' ? '0' : ObjectId(parentId),
+        userId: new ObjectId(session),
+      };
+
+      const files = await dbClient.db.collection('files')
+        .find(query)
+        .skip(skip)
+        .limit(limit)
+        .toArray();
+      return res.status(200).send(files);
+    } catch (e) {
+      console.error('Error in GET /files:', e.message);
+      return res.status(500).json({ error: 'Internal server error' });
     }
-    return res.status(401).json({ error: 'Unauthorized' });
   }
 
   static async putPublish(req, res) {
