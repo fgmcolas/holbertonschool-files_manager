@@ -145,17 +145,10 @@ class FilesController {
           parentId: parentId === '0' ? '0' : ObjectId(parentId),
           userId: ObjectId(session),
         };
-        const cacheKey = `files_${session}_${parentId}_${page}`;
-        const cachedFiles = await redisClient.get(cacheKey);
-        if (cachedFiles) {
-          return res.status(200).json(JSON.parse(cachedFiles));
-        }
-        const files = await dbClient.findFiles(query, limit, skip);
-        await redisClient.set(cacheKey, JSON.stringify(files), 60);
-
-        return res.status(200).json(files);
+        const search = await dbClient.db.collection('files').find(query).skip(skip).limit(limit)
+          .toArray();
+        return res.status(200).send(search);
       } catch (e) {
-        console.error('Error fetching files:', e);
         return res.status(500).json({ error: 'Internal server error' });
       }
     }
