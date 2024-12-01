@@ -135,7 +135,7 @@ class FilesController {
     }
     if (session) {
       let { parentId, page } = req.query;
-      if (!parentId) parentId = '0';
+      parentId = parentId || '0';
       page = parseInt(page, 10) || 0;
       const limit = 20;
       const skip = page * limit;
